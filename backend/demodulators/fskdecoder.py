@@ -90,6 +90,7 @@ from scipy import signal  # noqa: E402
 from constants import AX25_FRAMINGS, FramingType  # noqa: E402
 from demodulators.basedecoderprocess import BaseDecoderProcess  # noqa: E402
 from demodulators.deframerfactory import create_fsk_deframer  # noqa: E402
+from intel_layer import IntelFusionSuite  # noqa: E402
 from telemetry.parser import TelemetryParser  # noqa: E402
 
 
@@ -732,6 +733,23 @@ class FSKDecoder(BaseDecoderProcess):
             return "ax25"
         return "proprietary"
 
+    def _enrich_output_data(self, output_data, payload, timestamp):
+        """Attach intel_fusion data to the output packet via IntelFusionSuite."""
+        try:
+            signal_meta = output_data.get("signal") or {}
+            callsigns = output_data.get("callsigns") or {}
+            intel_event = {
+                "timestamp": timestamp,
+                "signal": signal_meta,
+                "from_callsign": callsigns.get("from", "UNKNOWN"),
+                "frequency_hz": signal_meta.get("frequency_hz", 0),
+                "hex_data": payload.hex(),
+            }
+            output_data["intel_fusion"] = self.intel_suite.process_intercept_as_dict(intel_event)
+        except Exception:
+            self.logger.exception("Intel Layer processing failed")
+        return output_data
+
     def _on_flowgraph_status(self, status, info=None):
         """Callback when flowgraph status changes"""
         self._send_status_update(status, info)
@@ -881,6 +899,9 @@ class FSKDecoder(BaseDecoderProcess):
 
         # Initialize components in the subprocess
         self.telemetry_parser = TelemetryParser()
+
+        # Initialize the Intel Fusion Suite for SIGINT/GEOINT processing
+        self.intel_suite = IntelFusionSuite()
 
         # Initialize stats in subprocess
         self.stats: Dict[str, Any] = {

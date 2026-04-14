@@ -695,6 +695,9 @@ class BaseDecoder:
         vfo_state = self._get_vfo_state()
         output_data["signal"] = self._get_signal_metadata(vfo_state)
 
+        # Allow subclasses to enrich output_data (e.g. intel_fusion)
+        output_data = self._enrich_output_data(output_data, payload, timestamp)
+
         msg: Dict[str, Any] = {
             "type": "decoder-output",
             "decoder_type": decoder_type,
@@ -710,6 +713,26 @@ class BaseDecoder:
                 self.stats["data_messages_out"] += 1
         except queue.Full:
             logger.warning("Data queue full, dropping packet output")
+
+    def _enrich_output_data(
+        self, output_data: Dict[str, Any], payload: bytes, timestamp: float
+    ) -> Dict[str, Any]:
+        """
+        Hook for subclasses to enrich the output data dict before it is
+        placed on the data queue.
+
+        The default implementation is a no-op.  Override in subclasses to
+        attach additional fields (e.g. intel_fusion).
+
+        Args:
+            output_data: The output dict as built by _send_packet_to_ui.
+            payload:     Raw decoded packet bytes.
+            timestamp:   Unix timestamp of the decode event.
+
+        Returns:
+            The (possibly enriched) output_data dict.
+        """
+        return output_data
 
     # Abstract methods - must be implemented by subclasses
 
